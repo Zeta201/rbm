@@ -52,3 +52,38 @@ class RBM():
         self.W += (torch.mm(v0.t(), ph0) - torch.mm(vk.t(), phk)).t()
         self.b += torch.sum((v0 - vk), 0)
         self.a += torch.sum((ph0 - phk), 0)
+
+    def fit(self, training_set, nb_users, epochs, batch_size, steps):
+        self.training_set = training_set
+        self.nb_users = nb_users
+        for epoch in range(1, epochs+1):
+            train_loss = 0
+            s = 0.
+            for id_user in range(0, nb_users - batch_size, batch_size):
+                vk = self.training_set[id_user:id_user+batch_size]
+                v0 = self.training_set[id_user:id_user+batch_size]
+                ph0, _ = self.sample_h(v0)
+                # contrastive divergence
+                for k in range(steps):
+                    _, hk = self.sample_h(vk)
+                    _, vk = self.sample_v(hk)
+                    vk[v0 < 0] = v0[v0 < 0]
+                phk, _ = self.sample_h(vk)
+                self.train(v0, vk, ph0, phk)
+                train_loss += torch.mean(torch.abs(v0[v0 >= 0] - vk[v0 >= 0]))
+                s += 1.
+            print('ephoch: {} loss: {}'.format(epoch, train_loss/s))
+
+    def predict(self, test_set):
+        self.test_set = test_set
+        test_loss = 0
+        s = 0
+        for id_user in range(self.nb_users):
+            v = self.training_set[id_user:id_user+1]
+            vt = self.test_set[id_user:id_user+1]
+            if len(vt[vt >= 0]) > 0:
+                _, h = self.sample_h(v)
+                _, v = self.sample_v(h)
+                test_loss += torch.mean(torch.abs(vt[vt >= 0] - v[vt >= 0]))
+                s += 1.
+        print('test_loss: {}'.format(test_loss/s))
